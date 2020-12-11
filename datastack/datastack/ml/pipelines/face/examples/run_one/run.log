@@ -1,0 +1,19 @@
+2015-11-20 14:00:14: [INFO], Initializing the datastack ...
+2015-11-20 14:00:15: [INFO], Creating the dataset ...
+2015-11-20 14:00:19: [INFO], Rosetta extraction return 905 records with 26 keys
+2015-11-20 14:00:19: [INFO], Creating the train/test split ...
+2015-11-20 14:00:23: [INFO], Train test split initialized with 824 to 74 samples
+2015-11-20 14:00:23: [INFO], Running PredictorByComponent.RidgeCV model...
+2015-11-20 14:00:23: [INFO], Parameters found for PredictorByComponent.RidgeCV model: {'cv': 10}
+2015-11-20 14:00:23: [INFO], PredictorByComponent.RidgeCV model trained for Depth with precision: 84.7333820307
+2015-11-20 14:00:24: [INFO], PredictorByComponent.RidgeCV model trained for Color with precision: 82.5054784514
+2015-11-20 14:00:24: [INFO], Storing PredictorByComponent.RidgeCV model
+2015-11-20 14:00:24: [INFO], Running PredictorByComponent.SVR model...
+2015-11-20 14:00:26: [INFO], PredictorByComponent.SVR model trained for Depth with precision: 84.6603360117
+2015-11-20 14:00:26: [INFO], PredictorByComponent.SVR model trained for Color with precision: 74.0504017531
+2015-11-20 14:00:26: [INFO], Storing PredictorByComponent.SVR model
+2015-11-20 14:00:27: [INFO], Running PredictorByComponent.kNN model...
+2015-11-20 14:00:28: [INFO], PredictorByComponent.kNN model trained for Depth with precision: 82.7246165084
+2015-11-20 14:00:28: [INFO], PredictorByComponent.kNN model trained for Color with precision: 81.2636961286
+2015-11-20 14:00:28: [INFO], Storing PredictorByComponent.kNN model
+Couldn't import dot_parser, loading of dot files will not be possible.

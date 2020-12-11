@@ -1,0 +1,229 @@
+\documentclass{scrartcl}
+\usepackage{natbib,amsmath}
+\begin{document}
+\title{\bf Introduction to ordinary least squares}
+\author{Christoph Lippert}
+\maketitle
+In ordinary least squares we use a linear model:
+$$
+y=X\beta + \epsilon,
+$$
+where $y\in R^N$ (telomere-length), $X\in R^{N \times D}$ (regressors), and $\beta\in R^{D}$ (weights).
+
+The noise is assumed independent mean zero Gaussian
+$$
+\epsilon \sim N(0,\sigma_y^2I)
+$$
+
+It follows that $y$ is distributed as
+
+\begin{align}
+\label{eq:distr_y}
+y\sim N(X\beta,\sigma^2_yI)
+\end{align}
+\section{Testing in the Linear model}
+\subsection{\bf $t$ statistic}
+
+For each coefficient $\beta_d$, the P-values is obtained from a 2-sided $t$-test. Each null hypothesis is that this particular regression weight is equal to zero (the others may be non-zero in the null).
+
+
+The $t$-statistic:
+\begin{align}
+\label{eq:ttest}
+t_d = \frac{\hat\beta_d}{\hat\sigma_{\beta_d}}
+\end{align}
+The distribution of the $t$-statistic:
+\begin{align}
+t_d\sim T(dof = N-D),
+\end{align}
+this follows from the form of the OLS and the distribution of $y$ in Eq.~\eqref{eq:distr_y}
+\begin{align*}
+\hat\beta=(X^TX)^{-1}X^Ty
+\end{align*}
+
+As this estimate is a linear (affine) transformation of $y$, it also follows a Gaussian distribution
+$$
+\hat\beta\sim N(\beta, \sigma_y^2(X^T X)^{-1}),
+$$
+where $\beta$ and $\sigma_y^2$ are respectively the true unknown effect sizes of the SNPs and  the variance of $y$.
+
+When testing we are only interested in a single entry of $\hat\beta$, so the distribution of a single value follows by marginalization (integrating out the remaining weights from the joint distribution)
+$$
+\hat\beta_d\sim N\left(\beta_d, \sigma_y^2\left[(X^T X)^{-1}\right]\right),
+$$
+or equivalently
+\begin{align}
+\label{eq:distr_beta}
+\frac{\hat\beta_d-\beta_d}{\sigma_y\sqrt{\left[(X^T X)^{-1}\right]}}\sim N\left(0, 1\right).
+\end{align}
+
+In the test we plug the null hypothesis $\beta_d=0$ into Eq.~\eqref{eq:distr_beta} and also replace unkowns with their estimates, namely  the OLS estimate of the standard deviation $\hat\sigma_y$ (Eq.~\eqref{eq:hat_sigma_y}) of the variance of $y$ to obtain the standard error of $\hat\beta_d$ (Eq.~\eqref{eq:hat_sigma_beta}).
+The statistic follows the $t$-distribution in Eq.~\eqref{eq:ttest}.
+\paragraph{Side computations}
+\begin{align}
+\label{eq:hat_sigma_beta}
+\hat\sigma_{\beta_j}=\hat\sigma_y\sqrt{\left[(X^TX)^{-1}\right]_{d,d}}
+\\
+\label{eq:hat_sigma_y}
+\hat\sigma_y = \sqrt{\frac{1}{N-D}RSS}
+\\\nonumber
+RSS=(y-X\hat\beta)^T(y-X\hat\beta)
+\end{align}
+
+
+\subsection{\bf $F$-statistic:}
+For testing multiple entries of $\beta$ jointly, we define the following $F$-statistic:
+\begin{align}
+f = \frac{\hat\beta^T A \left(A^T\left( X^T X \right)^{-1}A\right)^{-1} A^T \hat\beta}
+{P}
+,
+\end{align}
+for any full rank $D\times P$ matrix $A$ with $P\leq D$.
+
+The statistic is $F$ distributed with $P$ numerator degrees of freedom and $N-P$  denominator degrees of freedom~\citep{kang2008efficient}.
+
+\section{$r^2$ in the linear model}
+There was also some confusion, what the meaning of the $r^2$ was:
+\begin{align}
+r^2 = 1-\frac{RSS}{TSS},
+\end{align}
+where $$TSS = (y-\bar y)^T(y-\bar y).$$
+This is fraction of total variance in $y$ explained. The difference in $r^2$ before and after adding a new variable, such as gender, means literally the increase in fraction of total variance explained by the model.
+
+\paragraph{$R^2$ as Pearson correlation}
+Note that on the training set this quantity can be interpreted as a squared Pearson correlation coefficient between predictions $X\hat\beta$ and the phenotype values $y$ on the training set (see proof below, ignoring the mean of $y$ for convenience). On a test set this interpretation is lost. As a result $r^2$ is between 0 and 1 on the training set and an arbitrary number on the test set.
+
+\begin{align*}
+r_{Pearson}^2 &= \left(\frac{Cov(X\hat\beta,y)}{\sqrt{V[X\hat\beta],V[y]}}\right)^2
+\\
+&=
+\frac{\left(\frac{1}{N}(X\hat\beta)^Ty\right)^2}{\frac{1}{N}{(X\hat\beta)}^T (X\hat\beta) \cdot \frac{1}{N}y^T y}
+\\
+&=
+\frac{\left((X\hat\beta)^Ty\right)^2}{{\hat y}^T \hat y \cdot y^T y}
+\\
+&=
+\frac{\left(y^TX(X^T X)^{-1}X^Ty\right)^2}{y^TX(X^T X)^{-1}X^TX(X^T X)^{-1}X^Ty \cdot y^T y}
+\\
+&=
+\frac{\left(y^TX(X^T X)^{-1}X^Ty\right)^2}{y^TX(X^T X)^{-1}X^Ty \cdot y^T y}
+\\
+&=
+\frac{y^TX(X^T X)^{-1}X^Ty}{ y^T y}
+\\
+&=
+\frac{y^Ty - y^Ty + y^TX(X^T X)^{-1}X^Ty}{ y^T y}
+\\
+&=
+\frac{y^Ty - y^T(I - X(X^T X)^{-1}X^T)y }{ y^T y}
+\\
+&=
+\frac{y^Ty}{y^Ty} - \frac{y^T(I - X(X^T X)^{-1}X^T)y }{ y^T y}
+\\
+&=
+1 - \frac{y^T(I - 2 X(X^T X)^{-1}X^T + (X^T X)^{-1}X^TX(X^T X)^{-1}X^T)y }{ y^T y}
+\\
+&=
+1 - \frac{y^Ty - 2 y^TX(X^T X)^{-1}X^Ty + Y^T(X^T X)^{-1}X^TX(X^T X)^{-1}X^Ty }{ y^T y}
+\\
+&=
+1 - \frac{y^Ty - 2 y^TX\hat\beta + \hat\beta^T X^TX\hat\beta }{ y^T y}
+\\
+&=
+1 - \frac{\left(y - X\hat\beta\right)^T \left(y - X\hat\beta\right)}{ y^T y}
+\\
+&=
+1 - \frac{RSS}{ TSS}
+\end{align*}
+
+\section{\bf Power calculation:}
+
+We define the following model:
+Let $z$ be the vector of the number of minor alleles of the SNP for each person.
+Further, let $x=z-E[z]$, and $y$ be the mean-centered phenotype vector.  Our effect size estimate in a model without covariates---As both $x$ and $y$ are zero mean, this is exactly equialent to using a model with a bias term---is equal to
+\begin{align}
+\hat\beta = (x^T x)^{-1}x^Ty
+\end{align}
+Let us also assume that $\sigma_y$ is not an estimate, but known, such that we don't need to use a $t$ distribution to model the distribution of $\hat\beta$.
+Consequently, using unbiasedness ($E(\hat\beta) = \beta$), $\hat\beta$ is distributed as $N(\beta,\sigma_\beta^2)$.
+
+Using this distribution, we can compute power as the probability mass that resides in the critical (rejection) region  $\mathcal{C}$ of the null distribution ($\beta=0$) when the true value of the effect size is $\beta\neq0$.
+\begin{align}
+\int_{\mathcal{C}} N(\hat\beta | \beta,\sigma_\beta^2) d \hat\beta
+\end{align}
+
+What we need in order to compute this integral is the boundaries of $\mathcal{C}$ (given in in Section~\ref{sec:critical_boundaries} and the value of $\sigma_\beta^2$ (given in Section~\ref{sec:var_beta}).
+\subsection{Finding the boundaries of $\mathcal{C}$}
+\label{sec:critical_boundaries}
+For a significance level $alpha$ and the null hypothesis $\beta=0$, under the normal model, we declare something significant if
+\begin{align}
+2 \cdot (1-F_N(|\hat\beta_d|))<\alpha,
+\end{align}
+where we take the absolute value beacause we perform a two sided test---this is also were the factor 2 comes from---and $F_N$ is the normal cummulative distribution function.
+
+This is equivalent to the following $P$-value:
+\begin{align}
+\begin{array}{lc}
+2 \cdot F_N(\hat\beta), & \forall \hat\beta<0\\
+2 \cdot (1-F_N(\hat\beta)), & \forall \hat\beta\geq0
+\end{array}
+\end{align}
+
+This $P$-value is significant ($<\alpha$), for the interval from $-\infty$ to the point $a_{low}$ where the inverse normal distribution function $F_N^{-1}$ equals $\alpha/2$ and from the point $a_{high}$, where the inverse normal distribution function  $F_N^{-1}$ equals $1-\alpha/2$ to $\infty$.
+
+The resulting integral for computing power follows as the sum over the two disjoint intervals:
+\begin{align}
+\int_{-\infty}^{a_{low}} N(\hat\beta | \beta,\sigma_\beta^2) d \hat\beta + \int_{a_{high}}^{\infty} N(\hat\beta | \beta,\sigma_\beta^2) d \hat\beta
+\end{align}
+
+The inverse distribution function can be evaluated using standard software (e.g. scipy.stats)
+\subsection{Finding an estimate for $\sigma_\beta^2$}
+\label{sec:var_beta}
+\begin{align}
+\sigma_\beta^2 &= \sigma_y^2 (x^T x)^{-1}
+\\
+&=
+\frac{1}{N} \sigma_y^2 \left(\frac{1}{N} \left(z-E[z]\right)^T \left(z-E[z]\right)\right)^{-1}
+\\
+&=
+\frac{1}{N} \sigma_y^2 V[z]^{-1}
+\end{align}
+To complete the estimate, we need to find a value for $V[z]$, the variance of the SNP, which we give in Section~\ref{sec:var_snp}.
+\subsection{ Distribution of the SNP $z$}
+\label{sec:var_snp}
+We assume that the SNP is bi-allelic with MAF $f$ and encoded as 0-1-2, counting number of minor alleles.
+The SNP can take the values 0, 1 or 2, counting the number of minor alleles.
+
+Then, under Hardy-Weinberg equilibrium, we can write down the expected value (=mean) and the variance of the SNP as a function of $f$.
+\paragraph{Expected value of the SNP}
+The Expected value follows as the sum of the SNP values weighted by their Hardy-Weinberg frequencies.
+\begin{align}
+E[z] &= 2 \cdot f^2 + 1 \cdot 2f(1-f) + 0 \cdot (1-f)^2
+\\
+&=
+2 f^2 + 2f -2f^2
+\\
+&=
+2f
+\end{align}
+\paragraph{Variance of the SNP}
+We compute the variance of the SNP using the definition of the variance as difference of the expectation of the square and the square of the expectation and the expected value computed above.
+\begin{align}
+V[z] &= E[z^2] - E[z]^2 
+\\&= 
+2^2 \cdot f^2 + 1^2 \cdot 2f(1-f) + 0^2 \cdot (1-f)^2 - E[z]^2 
+\\
+&=
+4 f^2 + 2f -2f^2 - 4f^2 
+\\
+&=
+2f - 2f^2
+\\
+&=
+2f(1-f)
+\end{align}
+
+\bibliographystyle{plain}
+\bibliography{derivation}
+\end{document}
+

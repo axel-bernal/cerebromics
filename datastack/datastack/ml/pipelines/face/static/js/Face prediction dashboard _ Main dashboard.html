@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<!-- saved from url=(0051)http://localhost:9999/face_renderer/dashboard.html? -->
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Face prediction dashboard | Main dashboard</title>
+
+    <link href="./Face prediction dashboard _ Main dashboard_files/bootstrap.min.css" rel="stylesheet">
+    <link href="./Face prediction dashboard _ Main dashboard_files/font-awesome.css" rel="stylesheet">
+
+    <link href="./Face prediction dashboard _ Main dashboard_files/animate.css" rel="stylesheet">
+    <link href="./Face prediction dashboard _ Main dashboard_files/style.css" rel="stylesheet">
+
+<style id="style-1-cropbar-clipper">/* Copyright 2014 Evernote Corporation. All rights reserved. */
+.en-markup-crop-options {
+    top: 18px !important;
+    left: 50% !important;
+    margin-left: -100px !important;
+    width: 200px !important;
+    border: 2px rgba(255,255,255,.38) solid !important;
+    border-radius: 4px !important;
+}
+
+.en-markup-crop-options div div:first-of-type {
+    margin-left: 0px !important;
+}
+</style></head>
+
+<body class=" pace-done" data-feedly-mini="yes"><div class="pace  pace-inactive"><div class="pace-progress" data-progress-text="100%" data-progress="99" style="transform: translate3d(100%, 0px, 0px);">
+  <div class="pace-progress-inner"></div>
+</div>
+<div class="pace-activity"></div></div>
+
+<div id="wrapper">
+
+    <nav class="navbar-default navbar-static-side" role="navigation">
+        <div class="sidebar-collapse">
+            <ul class="nav" id="side-menu">
+                <li class="nav-header">
+                    <div class="dropdown profile-element">
+                            <a data-toggle="dropdown" class="dropdown-toggle" href="http://localhost:9999/face_renderer/dashboard.html?#">
+                            <span class="clear"> <span class="block m-t-xs"> <strong class="font-bold">HLI User</strong>
+                             </span> <span class="text-muted text-xs block">Data scientist <b class="caret"></b></span> </span> </a>
+                            <ul class="dropdown-menu animated fadeInRight m-t-xs">
+                                <li><a href="http://localhost:9999/face_renderer/dashboard.html?#">Logout</a></li>
+                            </ul>
+                    </div>
+                    <div class="logo-element">
+                        rDB
+                    </div>
+                </li>
+                <li class="active">
+                    <a href="http://localhost:9999/face_renderer/dashboard.html?#"><i class="fa fa-database"></i> <span class="nav-label">Dashboard</span></a>
+                </li>
+                <li>
+                    <a href="http://localhost:9999/face_renderer/dashboard.html?#"><i class="fa fa-question"></i> <span class="nav-label">Documentation</span> </a>
+                </li>
+            </ul>
+
+        </div>
+    </nav>
+
+    <div id="page-wrapper" class="gray-bg" style="min-height: 914px;">
+        
+        <div class="wrapper wrapper-content animated fadeInRight">
+            
+            <div class="row">
+                <div class="col-lg-12">
+    
+                    <div class="ibox-content m-b-sm border-bottom">
+                        <div class="p-xs">
+                            <div class="pull-left m-r-md">
+                                <i class="fa fa-database text-navy" style="font-size: 66px;"></i>
+                            </div>
+                            <h2>Welcome to the face-prediction engine</h2>
+                            <span>Last model released on: 11:30pm - 12/10/15</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="row">
+                    <div class="col-lg-6">
+                        <div class="ibox float-e-margins">
+                            <div class="ibox-title">
+                                <h5>3d scan of teh patient</h5>
+                            </div>
+                            <div class="ibox-content">
+                                <canvas id="cv_graph" style="border: 1px solid; width: 100%; height: 350px;"></canvas>
+                                <small>Generated at</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-6">
+                        <div class="ibox float-e-margins">
+                            <div class="ibox-title">
+                                <span class="label label-success pull-right">Result</span>
+                                <h5>ML Reconstruction from genome</h5>
+                            </div>
+                            <div class="ibox-content">
+                                <canvas id="cv_graph_predicted" style="border: 1px solid; width: 100%; height: 350px;"></canvas>
+                                <small>Generated at</small>
+                            </div>
+                        </div>
+                    </div>
+            </div>
+
+
+
+            <div class="row">
+                <div class="col-lg-12">
+                    <div class="ibox float-e-margins">
+                        <div class="ibox-title">
+                            <h5>Model details</h5>
+                            <div class="ibox-tools">
+                                <a class="collapse-link">
+                                    <i class="fa fa-chevron-up"></i>
+                                </a>
+                                <a class="close-link">
+                                    <i class="fa fa-times"></i>
+                                </a>
+                            </div>
+                        </div>
+                        <div class="ibox-content">
+
+                            <div class="table-responsive">
+                                <table class="table table-striped">
+                                    <thead>
+                                    <tr>
+                                        <th></th>
+                                        <th>Name</th>
+                                        <th>Embedding vector</th>
+                                    </tr>
+                                    </thead>
+                                    <tbody>
+                                    <tr>
+                                        <td><i class="fa fa-check-circle text-navy"></i></td>
+                                        <td>10105</td>
+                                        <td>10105_predicted</td>
+                                    </tr>
+                                    <tr>
+                                        <td><i class="fa fa-check-circle text-navy"></i></td>
+                                        <td>10105</td>
+                                        <td>10105_predicted</td>
+                                    </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+                
+                
+            </div>
+
+        </div>
+        <div class="footer">
+            <div class="pull-right">
+                Version: <strong>alpha-0.1</strong>
+            </div>
+            <div>
+                <strong>Copyright</strong> Human Longevity Inc. © 2014-2015
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- Mainly scripts -->
+<script src="./Face prediction dashboard _ Main dashboard_files/jquery-2.1.1.js"></script>
+<script src="./Face prediction dashboard _ Main dashboard_files/jsc3d.min.js"></script>
+<script src="./Face prediction dashboard _ Main dashboard_files/bootstrap.min.js"></script>
+<script src="./Face prediction dashboard _ Main dashboard_files/jquery.metisMenu.js"></script>
+<script src="./Face prediction dashboard _ Main dashboard_files/jquery.slimscroll.min.js"></script>
+
+<!-- Flot -->
+<script src="./Face prediction dashboard _ Main dashboard_files/jquery.flot.js"></script>
+<script src="./Face prediction dashboard _ Main dashboard_files/jquery.flot.tooltip.min.js"></script>
+<script src="./Face prediction dashboard _ Main dashboard_files/jquery.flot.spline.js"></script>
+<script src="./Face prediction dashboard _ Main dashboard_files/jquery.flot.resize.js"></script>
+<script src="./Face prediction dashboard _ Main dashboard_files/jquery.flot.pie.js"></script>
+<script src="./Face prediction dashboard _ Main dashboard_files/jquery.flot.symbol.js"></script>
+<script src="./Face prediction dashboard _ Main dashboard_files/jquery.flot.time.js"></script>
+
+<!-- ChartJS-->
+<script src="./Face prediction dashboard _ Main dashboard_files/Chart.min.js"></script>
+
+<!-- Custom and plugin javascript -->
+<script src="./Face prediction dashboard _ Main dashboard_files/inspinia.js"></script>
+<script src="./Face prediction dashboard _ Main dashboard_files/pace.min.js"></script>
+
+<script>
+    $(document).ready(function() {
+
+        var viewer = new JSC3D.Viewer(document.getElementById('cv_graph'), {
+            SceneUrl: 'renders/01500_v1/output.obj', 
+            InitRotationX: 0, 
+            InitRotationY: 0, 
+            InitRotationZ: 0, 
+            BackgroundColor1: '#FFFFFF', 
+            BackgroundColor2: '#FFFFFF', 
+            RenderMode: 'texturesmooth', 
+            Renderer: 'webgl'
+            });
+            viewer.init();
+        viewer.update();
+
+
+        var viewer_p = new JSC3D.Viewer(document.getElementById('cv_graph_predicted'), {
+            SceneUrl: '', 
+            InitRotationX: 0, 
+            InitRotationY: 0, 
+            InitRotationZ: 0, 
+            BackgroundColor1: '#FFFFFF', 
+            BackgroundColor2: '#FFFFFF', 
+            RenderMode: 'texturesmooth', 
+            Renderer: 'webgl'
+            });
+            viewer.init();
+        viewer_p.update();
+
+        //var myNewChart = new Chart(ctx).Line(lineData, lineOptions);
+
+    });
+
+</script>
+
+
+
+
+<div style="position: absolute; left: 345px; top: 343px; width: 484.5px; height: 20px; border: 1px solid rgb(0, 0, 0); pointer-events: none; display: none;"></div><div style="position: absolute; left: 348px; top: 346px; width: 480.5px; height: 16px; pointer-events: none; display: none; background: rgb(0, 0, 0);"></div><div style="position: absolute; left: 345px; top: 327px; width: 484.5px; height: 14px; font-weight: bold; font-style: normal; font-variant: normal; font-stretch: normal; font-size: 14px; line-height: normal; font-family: &#39;Courier New&#39;; color: rgb(0, 0, 0); pointer-events: none; display: none;">Loading mtl file ...</div><div id="feedly-mini" title="feedly Mini tookit"></div></body></html>

@@ -1,0 +1,4 @@
+graph	0.84
+naive_highconf	0.888888888889
+naive_overall	0.66
+naive_perhighconf	0.54

@@ -1,0 +1,1394 @@
+\documentclass[twoside]{article}
+\usepackage{Definitions}
+\usepackage{epsfig}
+\usepackage{algorithmic}
+\usepackage{algorithm}
+\usepackage{color}      % use if color is used in text
+\usepackage[style=authoryear,backend=biber]{biblatex}
+\addbibresource{paper.bib}
+
+\setlength{\oddsidemargin}{0.25 in}
+\setlength{\evensidemargin}{-0.25 in}
+\setlength{\topmargin}{-0.6 in}
+\setlength{\textwidth}{6.5 in}
+\setlength{\textheight}{8.5 in}
+\setlength{\headsep}{0.75 in}
+\setlength{\parindent}{0 in}
+\setlength{\parskip}{0.1 in}
+
+\definecolor{MyYellow}{rgb}{1,1,0.7}
+\definecolor{MyGreen}{rgb}{0.7,0.9,0.7}
+\definecolor{MyRed}{rgb}{0.9,0.2,0.2}
+\definecolor{MyBlue}{rgb}{0.7,0.7,0.90}
+
+\definecolor{MyDarkGreen}{rgb}{0.17,0.46,0.25}
+\definecolor{MyDarkRed}{rgb}{0.88,0.22,0.21}
+\definecolor{MyDarkBlue}{rgb}{0.11,0.11,0.70}
+
+\long\def\cut#1{}
+\newcommand{\Sigmat}{\bSigma_{\B{\theta}}}
+\newcommand{\sigei}{\sigma_\mathrm{e}^{-2}}
+\newcommand{\Pt}{\B{P}_{\B{\theta}}}
+\newcommand{\betahat}{(\B{X}\transpose\Sigmat^{-1}\B{X})^{-1}\B{X}\transpose\Sigmat^{-1}\B{y}}
+\newcommand{\betasym}{(\B{X}\transpose\Sigmat^{-1}\B{X})^{-1}\B{X}\transpose\Sigmat^{-1}}
+\newcommand{\symxsigma}{\Sigmat^{-1}\B{X}(\B{X}\transpose\Sigmat^{-1}\B{X})^{-1}\B{X}\transpose\Sigmat^{-1}}
+\newcommand{\sigmainv}{\Sigmat^{-1}}
+\newcommand{\Info}{\it\bm{I}}
+\newcommand{\TODO}[1]{{\color{MyRed}\fbox{TODO} #1}}
+\newcommand{\CHANGE}[1]{{\color{MyBlue} #1}}
+
+
+\begin{document}
+
+\date{\today}
+
+\title{Collapsed noise noise $t$ process regression}
+\author{Christoph Lippert}
+%\title{Score Test Derivations} %{}{} % Lecture name, Lecturer, Scribes
+
+
+\maketitle
+
+\begin{abstract}
+The goal is to build a regression model that allows to adjust covariance (=kernel) parameters of a mixed model without having to think about noise distributions or any other nuisance parameters, such as total variance, signal to noise ratio, or fixed effects.
+\end{abstract}
+
+\section{Introduction and motivation}
+
+We start out by introducing the model in Section~\ref{sec:model}.
+
+From there on the approach that we take is to integrate out all of these parameters over suitable prior distributions.
+In Section~\ref{sec:inference} we show that except for the signal to noise ratio, all integrals can be performed in close form.
+
+The resulting model is a robust $t$-process model that numerically averages over the signal to noise-ratio by numerical integration. We show that this numerical integration comes at no additional asymptotic cost using an efficient integration scheme based on singular value decomposition (SVD).
+
+As a means to estimate the remaining covariance parameters, we propose an efficient Expectation Conjugate Gradients algorithm~\cite{salakhutdinov2003optimization} in Section~\ref{sec:exp_conj_grad}.
+
+
+\TODO{
+
+Applications
+\begin{itemize}
+\item Variance decomposition
+\item Out of sample prediction
+\item Optimization examples
+\begin{itemize}
+\item GPLVM example (non-linear PCA)
+\item Variance dissection example (combined with out of sample prediction)
+\end{itemize}
+\item Hybrid (=Hamiltonian) MCMC example, sampling kernel parameters. 
+\begin{itemize}
+\item Problem: covariance priors become quite coupled in the model, if we want to sample
+\end{itemize}
+\item Longer term bio applications
+\begin{itemize}
+\item GWAS if possible
+\item Kernel-based testing if possible
+\end{itemize}
+\end{itemize}
+}
+
+\section{The model}
+\label{sec:model}
+
+We model $N$ pairs of observations ($y_n$, $\B{x}_n$) of target variable $\mathcal{Y}$ and input variable $\mathcal{X}$. The goal is to model $P(\mathcal{Y} = y_n| \mathcal{X}=\B{x}_n)$ 
+as the noisy output of an unknown (non-linear) function $f$ of the inputs $\B{x}_n$ and parameters $\B{\Theta}$, corresponding to the parameters of interest.
+
+\begin{align*}
+{y}_n = f\left(\B{x}_n; \B{\Theta} \right) + \epsilon_n
+\end{align*}
+
+The noise $\epsilon_n$ is modeled as \iid Gaussian with variance $\sigma_e^2$.
+
+\begin{align*}
+{\epsilon}_n = \normal{0}{\sigma_e^2}
+\end{align*}
+
+We model $f$ as a Gaussian process with a mean function $\mu(\B{x})$ and covariance function $\sigma_g^2k_{\B{\theta}}(x_n,x_m)$.
+For simplicity, we restrict ourselves to the case of mean functions that are linear in a $D$-dimensional known basis function of the input vector $\phi(x_n)$.
+$$\mu(\B{x_n}) = \phi(\B{x}_n)\B{\beta}$$.
+
+For the sake of brevity and to unclutter the notation, we denote the matrix of all $\phi(\B{x}_n)$ by $\B{\Phi}\in\Real^{N \times D}$, dropping the dependence on $\B{x}_n$.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Efficient inference}
+\label{sec:inference}
+
+\begin{align*}
+p(\B{y} | \B{\beta}, \sigma^2, h^2 ) \sim \normal{\B{\Phi}\B{\beta}}{\sigma^2\left(h^2\B{K}_{\B{\theta}} + \left(1-h^2\right)\B{I} \right) }
+\end{align*}
+
+
+\begin{align}
+p(\B{y} \| \B{\theta}) =  \int_{\sigma^2}\int_{\B{\beta}}\int_{h^2}\Normal{\B{y}}{\B{\Phi}\B{\beta}}{\sigma^2\left(h^2\B{K}_{\B{\theta}} + \left(1-h^2\right)\B{I} \right) } \cdot p( \B{\beta} ) \cdot p(\sigma^2) \cdot p(h^2) d\sigma^2 d\B{\beta} dh^2
+\label{eq:marginal_likelihood}
+\end{align}
+\begin{itemize}
+\item We chose a uniform prior on $\B{\beta}$, as the resulting marginal likelihood corresponds to the REML objective in a mixed model~\cite{harville1974bayesian}.\footnote{Note, that there is no necessity to use a Gaussian prior, as this would be equivalent to adding a linear kernel $\Phi\Phi^{\T}$ component to the covariance function, and as a result is already subsumed by this model.}
+\item For the total variance we propose either to use the REML estimator, resulting in a corresponding profile likelihood, or to place a (conjugate) Gamma prior on the inverse total variance $\sigma^{-2}$, resulting in a $t$-distribution~\cite{shah2014student}.
+\item The choice for the prior on $h^2$ is arbitrary, as we are going to propose use of efficient numerical integration for this part.
+\end{itemize}
+
+
+From here, we start out by integrating out $\B{\beta}$ (over a uniform distribution), yielding the restricted likelihood~\cite{harville1974bayesian,lippert2013thesis,lippert2014greater}.
+
+\begin{align}
+     \lik{\B{\theta}}
+     &=
+     -\frac{(N-D)}{2} \logt(2\pi\sigma^{2}) - \frac{1}{2\sigma^2}\B{y}\transpose\Pt\B{y}
+     + \frac{1}{2} \logt \lvert \Pt \rvert_{+},
+\label{eq:remlP}
+\end{align}
+
+where we define the $N$-by-$N$ symmetric matrix $\Pt=\left(\sigmainv-\sigmainv\B{\Phi}(\B{\Phi}\tp\sigmainv\B{\Phi})^{-1}\B{\Phi}^{\T}\sigmainv\right)$, which is of rank $N-D$, and denote the pseudo-determinant of $\Pt$ by $\lvert \Pt \rvert_{+}$
+
+\subsection{Profiling out $\sigma^{2}$}
+
+plugging in the REML solution for $\sigma^2 = \frac{1}{N-D}\left(\B{y}\transpose\Pt\B{y} \right)$, we obtain
+
+\begin{align}
+     \lik{\B{\theta}}
+     &=
+     -\frac{(N-D)}{2} \logt\left(\frac{2\pi}{N-D} \B{y}\transpose\Pt\B{y}\right) - \frac{N-D}{2}
+     + \frac{1}{2} \logt \lvert \Pt \rvert_{+},
+\label{eq:remlP}
+\end{align}
+
+
+\subsection{Marginalizing out $\sigma^{2}$}
+
+
+Next, we place an inverse Gamma prior over $\sigma^2$, which yields a multivariate Student-$t$~\cite{furlotte2014quantifying,shah2014student,yu2007robust}.
+\begin{align}
+     \lik{\B{\theta}}
+     &=
+     \logt{\Gamma\left(\frac{\nu+N-D}{2}\right)}-\logt\Gamma\left(\frac{\nu}{2}\right) -\frac{N-D}{2}\logt\left(\left(\nu-2\right)+\pi\right)
+    +\frac{1}{2} \logt \lvert \Pt \rvert_{+}
+      -\frac{\nu+N-D}{2}\logt\left(1 + \frac{1}{\nu-2}\B{y}\transpose\Pt\B{y}\right)
+\label{eq:multi-t}
+\end{align}
+
+\subsection{Efficient integration over $h^2$}
+
+We can use any quadrature method that relies on evaluating $p(\B{y},h^2|\B{\theta})$. The issue is that whenever we change $h^2$, the corresponding matrix $\Pt$ of the model changes, requiring computation of inverses and determinants of the new $\Pt$.
+
+We make use of the SVD of $\Pt$ to speed up these computations, as proposed in Supplementary Section 7.3 of~\cite{lippert2014greater}.
+
+\subsubsection{Computational complexity}
+As a result the computations require computation of the SVD once for $\Pt$, which is an $O(N^3)$ operation.
+
+\subsection{Expectation conjugate gradients}
+\label{sec:exp_conj_grad}
+
+The standard method to solve a problem that involves parameters of interest as well as nuisance parameters, or missing data, that we would like to integrate out would be the use of the EM algorithm, where in the E-step one would take the expectation over the nuisance parameters and in the M-step one maximizes over the parameters of interest.
+
+We revert to an alternative to the standard EM algorithm called the Expected Conjugate Gradients method (ECG) proposed by~\cite{salakhutdinov2003optimization}. They show that the derivatives for the marginal likelihood~\ref{eq:marginal_likelihood} can be computed, by integrating over the derivatives for the log of the complete data likelihood weighted by the posterior over the missing data.
+
+ likelihood of the target variable given $h^2$ plus the log prior over $h^2$, weighted by the posterior of $h^2$. 
+\begin{align}
+     \frac{\partial}{\partial \B{\theta}}\logt p\left(\B{y}|\B{\theta}\right)
+     &=
+     \frac{1}{p\left(\B{y}|\B{\theta}\right)}\frac{\partial }{\partial \B{\theta}}p\left(\B{y}|\B{\theta}\right)
+     \\
+     &=
+     \frac{1}{p\left(\B{y}|\B{\theta}\right)}\frac{\partial }{\partial \B{\theta}}\int_{h^2} p\left(\B{y}, h^2 |\B{\theta}\right) d h^2
+     \\
+     &=
+     \frac{1}{p\left(\B{y}|\B{\theta}\right)}\int_{h^2}\frac{\partial }{\partial \B{\theta}} p\left(\B{y}, h^2|\B{\theta}\right) d h^2
+     \\
+     &=
+     \frac{1}{p\left(\B{y}|\B{\theta}\right)}\int_{h^2} \overbrace{p\left(\B{y}, h^2|\B{\theta}\right)\frac{1}{p\left(\B{y}, h^2|\B{\theta}\right)}}^{1} \frac{\partial }{\partial \B{\theta}} p\left(\B{y}, h^2|\B{\theta}\right) d h^2
+     \\
+     &=
+     \frac{1}{p\left(\B{y}|\B{\theta}\right)}\int_{h^2} p\left(\B{y}, h^2|\B{\theta}\right)  \overbrace{\frac{\partial }{\partial \B{\theta}} \logt p\left(\B{y},h^2|\B{\theta}\right)}^{\frac{1}{p\left(\B{y}, h^2|\B{\theta}\right)} \frac{\partial }{\partial \B{\theta}} p\left(\B{y}, h^2|\B{\theta}\right)} d h^2
+     \\
+     &=
+     \int_{h^2}\frac{1}{p\left(\B{y}|\B{\theta}\right)} p\left(\B{y}, h^2|\B{\theta}\right)  \frac{\partial }{\partial \B{\theta}} \logt p\left(\B{y},h^2|\B{\theta}\right) d h^2
+     \\
+     &=
+     \int_{h^2}\underbrace{\frac{ p\left(\B{y},h^2|\B{\theta}\right) }{p\left(\B{y}|\B{\theta}\right)} }_{p\left(h^2 | \B{y}; \B{\theta}\right)}\frac{\partial }{\partial \B{\theta}} \logt p\left(\B{y},h^2|\B{\theta}\right) d h^2
+     \\
+     &=
+     \int_{h^2}   p\left(h^2 | \B{y}; \B{\theta}\right)  \frac{\partial }{\partial \B{\theta}} \logt \underbrace{p\left(\B{y}, h^2|\B{\theta}\right)}_{p\left(\B{y}| h^2, \B{\theta}\right)\cdot p\left(h^2\right)} d h^2
+\end{align}
+The only condition for this derivation to hold is that we can swap integral and derivative.
+
+
+These derivatives can now be used in conjunction with any gradient based optimizer to find a local optimum.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Derivatives
+%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\subsection{Derivatives of $\logt p\left(\B{y}| h^2, \B{\theta}\right)$ w.r.t. $\B{\theta}$}
+\TODO{Check the derivatives. I did not check all the signs for correctness.}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Derivatives - Gaussian
+%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+\subsubsection{Gaussian case}
+\begin{align}
+     \frac{\partial\lik{\B{\theta}}}{\partial \B{\theta}}
+     &=
+    \frac{1}{2} \frac{\partial}{\partial \B{\theta}}\logt \lvert \Pt \rvert_{+}
+      -\frac{N-D}{2} \frac{\partial\lik{\B{\theta}}}{\partial \B{\theta}} \logt\left(\B{y}\transpose\Pt\B{y}\right)
+\end{align}
+
+\begin{align}
+    \frac{\partial}{\partial \B{\theta}}\logt \lvert \Pt \rvert_{+}     &=
+    -\tr\left(\Pt \frac{\partial \B{K}}{\partial \B{\theta}} \right)
+\end{align}
+
+\begin{align}
+    \frac{\partial}{\partial \B{\theta}} \logt\left(1 + \frac{1}{\nu-2}\B{y}\transpose\Pt\B{y}\right)     &=
+   - \frac{\B{y}\tp\Pt \frac{\partial \B{K}}{\partial \B{\theta}}\Pt\B{y}}{\B{y}\transpose\Pt\B{y}}
+\end{align}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Derivatives - Student-t
+%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\subsubsection{Student $t$ case}
+
+\begin{align}
+     \frac{\partial\lik{\B{\theta}}}{\partial \B{\theta}}
+     &=
+    \frac{1}{2} \frac{\partial}{\partial \B{\theta}}\logt \lvert \Pt \rvert_{+}
+      -\frac{\nu+p}{2} \frac{\partial\lik{\B{\theta}}}{\partial \B{\theta}} \logt\left(1 + \frac{1}{\nu-2}\B{y}\transpose\Pt\B{y}\right)
+\end{align}
+
+\begin{align}
+    \frac{\partial}{\partial \B{\theta}}\logt \lvert \Pt \rvert_{+}     &=
+    -\tr\left(\Pt \frac{\partial \B{K}}{\partial \B{\theta}} \right)
+\end{align}
+
+\begin{align}
+    \frac{\partial}{\partial \B{\theta}} \logt\left(1 + \frac{1}{\nu-2}\B{y}\transpose\Pt\B{y}\right)     &=
+   - \frac{\B{y}\tp\Pt \frac{\partial \B{K}}{\partial \B{\theta}}\Pt\B{y}}{1 + \frac{1}{\nu-2}\B{y}\transpose\Pt\B{y}}
+\end{align}
+
+%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{align}
+     \frac{\partial\lik{\B{\theta}}}{\partial \B{\theta}}
+     &=
+    \frac{1}{2} -\frac{\partial}{\partial \B{\theta}}\logt \lvert \Sigmat \rvert
+    -\frac{\partial}{\partial \B{\theta}}\logt \lvert \B{\Phi}\tp\Sigmat^{-1}\B{\Phi} \rvert
+      -\frac{\nu+p}{2} \frac{\partial\lik{\B{\theta}}}{\partial \B{\theta}} \logt\left(1 + \frac{1}{\nu-2}\B{y}\transpose\Pt\B{y}\right)
+\end{align}
+
+\begin{align}
+    \frac{\partial}{\partial \B{\theta}}\logt \lvert \Sigmat \rvert     &=
+    \tr\left(\Sigmat^{-1} \frac{\partial \B{K}}{\partial \B{\theta}} \right)
+\end{align}
+
+\begin{align}
+    \frac{\partial}{\partial \B{\theta}}\logt \lvert \B{\Phi}\tp\Sigmat^{-1}\B{\Phi} \rvert     &=
+    -\tr\left( \left(\B{\Phi}\tp\Sigmat^{-1}\B{\Phi}\right)^{-1} \B{\Phi}\tp\Sigmat^{-1}\frac{\partial \B{K}}{\partial \B{\theta}}\Sigmat^{-1}\B{\Phi} \right)
+\end{align}
+
+\begin{align}
+    \frac{\partial}{\partial \B{\theta}} \logt\left(1 + \frac{1}{\nu-2}\B{y}\transpose\Pt\B{y}\right)     &=
+   - \frac{\B{y}\tp\Pt \frac{\partial \B{K}}{\partial \B{\theta}}\Pt\B{y}}{1 + \frac{1}{\nu-2}\B{y}\transpose\Pt\B{y}}
+\end{align}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Predictions
+%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Making predictions}
+We make predictions by computing the mean (and variance) of the conditional distribution of a previously unobserved point $y^{\star}$ given the training data and the input $\B{x}^{\star}$.
+
+Predictive mean and covariance for the $t$-process can be found in~\cite{shah2014student}.
+\begin{align*}
+p(\B{y}^{\star}|\B{y}, \B{x}^{\star})
+\end{align*}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Predictions - mean
+%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\subsection{Predictive mean}
+
+The mean conditional on $h^2$ is the same as BLUP (GP mean)~\cite{shah2014student}.
+
+\TODO{check what the correct predictive mean is in the formulation with $\Pt$. Also, do we have to multiply by $p(h^2)$, or $p(h^2|\B{y})$ ? Should be correct.}
+
+\TODO{derive from standard BLUP}
+\begin{align*}
+E[\B{y}_{\star}|\B{y}, \B{x}_{\star}]
+=&
+\int_{h^2} p\left(h^2 | \B{y}; \B{\theta}\right) E[\B{y}_{\star}|\B{y}, \B{x}_{\star}, h^2] d h^2
+\\
+=&
+\int_{h^2}  p\left(h^2 | \B{y}; \B{\theta}\right)
+\left(
+\Sigma_{12}\tp\Sigmat^{-1}\B{y}
++
+\left(\B{\Phi}_{\star} - \Sigma_{12}\tp\Sigmat^{-1} 
+\B{\Phi}\right)\left(\B{\Phi}\tp\Sigmat^{-1}\B{\Phi}\right)^{-1}
+\B{\Phi}\tp
+    \Sigmat^{-1}
+\B{y}
+\right)
+d h^2
+\end{align*}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Predictions - variance
+%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\subsection{Predictive variance}
+
+\TODO{Check derivation from~\cite{shah2014student} and derive Expectation over $h^2$.}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Experiments
+%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Experiments}
+\subsection{Out of sample prediction}
+
+\subsection{Variance decomposition}
+
+
+\subsubsection{Comparison of profiled vs. averaged results}
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% BIBLIOGRAPHY
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%\bibliographystyle{abbrvnat}
+%\bibliographystyle{abbrv}
+%\bibliography{paper}
+\printbibliography
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Appendix
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\clearpage
+\appendix
+
+
+\section{Notes}
+\begin{itemize}
+\item For more than 2 kernels, we currently use a hierarchical kernel weighting
+\item That leads to a non-uniform grid on the simplex of fraction variance decomposition of the trait
+\item How can we obtain an arbitrary prior?
+\end{itemize}
+
+\begin{align*}
+\B{y} \sim \normal{\B{X}\B{\beta}}{\sigma^2\left(h^2\left(\sum_{k=1}^K\gamma_k^2\B{K}_k\right) + \left(1-h^2\right)\B{I} \right) }
+\end{align*}
+
+\begin{align*}
+0 \leq \gamma_k^2 \leq 1
+\\
+\sum_{k=1}^K\gamma_k^2 = 1
+\end{align*}
+\begin{itemize}
+\item As a starting point we try to be uniform on the Simplex.
+\item From there on we can re-weight based on the prior (e.g. Dirichlet) density function to obtain an arbitrary prior.
+\end{itemize}
+\begin{align*}
+\B{y} \sim \normal{\B{0}}{\sigma^2\left( \alpha_e^2\B{I} + \sum_{k=1}^K\alpha_k^2\B{K}_k \right) }
+\end{align*}
+
+\begin{align*}
+0 \leq \alpha_k^2 \leq 1
+\\
+\alpha_e^2 + \sum_{k=1}^K\alpha_k^2 = 1
+\end{align*}
+
+\subsection{Special case: $K=2$}
+
+\begin{figure}[h!]
+  \centering
+    %\reflectbox{%
+      \includegraphics[width=0.5\textwidth]{dirichlet_quadrature_lmm.jpg}%}
+  \caption{We want to integrate along a line that keeps ratio between $a$ and $b$ constant. The width of the simplex at that ratio is equal to $\sqrt{2(1-c)} = \sqrt{2 (a+b)}$. If we sample the lines uniformly along the $a+b=1$ line this is a weighting factor that should give us uniformity over the simplex $a+b+c=1$. Empirically, the weighting factor seems to be ${2(1-c)} = {2 (a+b)}$.}
+\end{figure}
+
+In this case we are looking at the
+
+\subsection{Collapsed Kernel estimation}
+
+\begin{itemize}
+\item The method should work with any kernel, to integrate over the isotropic noise
+\item Instead of exhaustive enumeration, we could also try to develop more efficient samplers, or use expected conjugate gradient for optimizing the kernel (by swapping integral and derivative operators and averaging over derivative numerically using SVD trick)
+\item IS there also a max conjugate gradient? Would need to allow swapping derivative and max operators
+\end{itemize}
+
+
+\section{Conditional distribution given a train and test data set}
+Joint distribution of $\B{y_1}$, $\B{y_2}$, and $\B{\beta}$:
+\begin{align*}
+\Normal{
+\begin{bmatrix}
+\B{y_1}\\
+\B{y_2}
+\end{bmatrix}
+}
+{
+\begin{bmatrix}
+\B{X_1}\\
+\B{X_2}
+\end{bmatrix}    
+\B{\beta}
+}
+{
+\begin{bmatrix}
+\Sigma_{11} & \Sigma_{12}\\
+\Sigma_{12}\tp & \Sigma_{22} 
+\end{bmatrix}
+}
+\cdot
+p(\B{\beta})
+\end{align*}
+
+\begin{align*}
+\begin{bmatrix}
+\Sigma_{11} & \Sigma_{12}\\
+\Sigma_{12}\tp & \Sigma_{22} 
+\end{bmatrix}^{-1}
+= 
+\begin{bmatrix}
+\Lambda_{11} & \Lambda_{12}\\
+\Lambda_{12}\tp & \Lambda_{22} 
+\end{bmatrix}
+\end{align*}
+
+\begin{align*}
+\Lambda_{11}
+&=
+\Sigma_{11}^{-1} +\Sigma_{11}^{-1}\Sigma_{12}\Lambda_{22}\Sigma_{12}\tp\Sigma_{11}^{-1}
+\\&=
+\left(\Sigma_{11} - \Sigma_{12}\Sigma_{22}^{-1}\Sigma_{12}\tp\right)^{-1}
+\\&=
+\Sigma_{11}^{-1} - \Lambda_{12}\Sigma_{12}\tp\Sigma_{11}^{-1}
+\\&=
+\Sigma_{11}^{-1} - \Lambda_{12}\Lambda_{22}^{-1}\Lambda_{12}\tp
+\end{align*}
+
+\begin{align*}
+\Lambda_{12}
+=
+-\Sigma_{11}^{-1}\Sigma_{12}\Lambda_{22}
+=
+-\Lambda_{11}\Sigma_{12}\tp\Sigma_{22}^{-1}
+\end{align*}
+
+\begin{align*}
+\Lambda_{22}=
+\Sigma_{22}^{-1} +\Sigma_{22}^{-1}\Sigma_{12}\tp\Lambda_{11}\Sigma_{12}\Sigma_{22}^{-1}
+=\left(\Sigma_{22} - \Sigma_{12}\tp\Sigma_{11}^{-1}\Sigma_{12}\right)^{-1}
+=
+\Sigma_{22}^{-1} - \Lambda_{12}\tp\Lambda_{11}^{-1}\Lambda_{12}
+\end{align*}
+As we assume that $p(\B{\beta})$ is uniform, we can leave it out.
+\begin{align*}
+\Normal{
+\begin{bmatrix}
+\B{y_1}\\
+\B{y_2}
+\end{bmatrix}
+}
+{
+\begin{bmatrix}
+\B{X_1}\\
+\B{X_2}
+\end{bmatrix}    
+\B{\beta}
+}
+{
+\sigma^2
+\begin{bmatrix}
+\Sigma_{11} & \Sigma_{12}\\
+\Sigma_{12}\tp & \Sigma_{22} 
+\end{bmatrix}
+}
+\\
+\propto
+\exp\left(-\frac{1}{2\sigma^2}
+\begin{bmatrix}
+\B{y_1} - \B{X_1}\B{\beta}\\
+\B{y_2} - \B{X_2}\B{\beta}
+\end{bmatrix}\tp
+\begin{bmatrix}
+\Lambda_{11} & \Lambda_{12}\\
+\Lambda_{12}\tp & \Lambda_{22} 
+\end{bmatrix}
+\begin{bmatrix}
+\B{y_1} - \B{X_1}\B{\beta}\\
+\B{y_2} - \B{X_2}\B{\beta}
+\end{bmatrix}
+\right) 
+\\=
+\exp(
+-\frac{1}{2\sigma^2}
+(
+\B{y_1}\tp 
+\Lambda_{11}
+\B{y_1} 
+-
+2
+\B{\beta}\tp\B{X_1}\tp 
+\Lambda_{11}
+\B{y_1} 
++
+2
+\B{y_1}\tp 
+\Lambda_{12}
+\B{y_2}
+-
+2
+\B{y_1}\tp 
+\Lambda_{12}
+\B{X_2}\B{\beta}
++
+\B{\beta}\tp\B{X_1}\tp 
+\Lambda_{11}
+\B{X_1}\B{\beta}
+\\+
+2
+\B{\beta}\tp\B{X_1}\tp 
+\Lambda_{12}
+\B{X_2}\B{\beta}
++
+\B{\beta}\tp\B{X_2}\tp 
+\Lambda_{22}
+\B{X_2}\B{\beta}
++
+\B{y_2}\tp 
+\Lambda_{22}
+\B{y_2}
+-
+2
+\B{y_2}\tp 
+\Lambda_{22}
+\B{X_2}\B{\beta}
+-
+2
+\B{\beta}\tp\B{X_1}
+\Lambda_{12}
+\B{y_2}
+)
+)
+\\
+=
+\exp(
+-\frac{1}{2\sigma^2}
+(
+\B{y_1}\tp 
+\Lambda_{11}
+\B{y_1} 
+-
+2
+\B{\beta}\tp\B{X}\tp 
+\begin{bmatrix}
+\Lambda_{11} \\ \Lambda_{12}\tp
+\end{bmatrix}
+\B{y_1} 
++
+2
+\B{y_1}\tp 
+\Lambda_{12}
+\B{y_2}
++
+\B{\beta}\tp\B{X}\tp 
+\Lambda
+\B{X}\B{\beta}
++
+\B{y_2}\tp 
+\Lambda_{22}
+\B{y_2}
+-
+2
+\B{y_2}\tp
+\begin{bmatrix} 
+\Lambda_{12} \\
+\Lambda_{22}
+\end{bmatrix}\tp
+\B{X}\B{\beta}
+)
+)
+\\
+\propto
+\exp(
+-\frac{1}{2\sigma^2}
+( 
+-
+2
+\B{\beta}\tp\B{X}\tp 
+\begin{bmatrix}
+\Lambda_{11} \\ \Lambda_{12}\tp
+\end{bmatrix}
+\B{y_1} 
++
+2
+\B{y_1}\tp 
+\Lambda_{12}
+\B{y_2}
++
+\B{\beta}\tp\B{X}\tp 
+\Lambda
+\B{X}\B{\beta}
++
+\B{y_2}\tp 
+\Lambda_{22}
+\B{y_2}
+-
+2
+\B{y_2}\tp
+\begin{bmatrix} 
+\Lambda_{12} \\
+\Lambda_{22}
+\end{bmatrix}\tp
+\B{X}\B{\beta}
+)
+)
+\end{align*}
+
+\subsubsection{Covariance of $\B{\beta}$ and test data}
+It follows that the covariance of $p(\B{y_2},\B{\beta}|\B{y_1})$ is
+
+\begin{align}
+\sigma^2
+\begin{bmatrix}
+\Lambda_{22} 
+& 
+-\begin{bmatrix} 
+\Lambda_{12} \\
+\Lambda_{22}
+\end{bmatrix}\tp
+\B{X}
+\\
+-\B{X}\tp
+\begin{bmatrix} 
+\Lambda_{12} \\
+\Lambda_{22}
+\end{bmatrix}
+&
+\B{X}\tp\Lambda\B{X}
+\end{bmatrix}^{-1}
+=
+\sigma^2
+\begin{bmatrix}
+A
+& 
+B
+\\
+B\tp
+&
+D
+\end{bmatrix}
+\end{align}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Covariance of beta given y_1
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{align*}
+D
+&=\left(
+\B{X}\tp\Lambda\B{X}
+-
+\B{X}\tp
+\begin{bmatrix} 
+\Lambda_{12} \\
+\Lambda_{22}
+\end{bmatrix}
+\Lambda_{22}^{-1}
+\begin{bmatrix} 
+\Lambda_{12} \\
+\Lambda_{22}
+\end{bmatrix}\tp
+\B{X}
+\right)^{-1}
+\\&=
+\left(
+\B{X}\tp
+\left(\Lambda
+-
+\begin{bmatrix} 
+\Lambda_{12} \\
+\Lambda_{22}
+\end{bmatrix}
+\Lambda_{22}^{-1}
+\begin{bmatrix} 
+\Lambda_{12} \\
+\Lambda_{22}
+\end{bmatrix}\tp
+\right)
+\B{X}
+\right)^{-1}
+\\&=
+\left(
+\B{X}\tp
+\left(\Lambda
+-
+\begin{bmatrix} 
+\Lambda_{12}\Lambda_{22}\Lambda_{12}\tp  & \Lambda_{12}\\
+\Lambda_{12}\tp & \Lambda_{22}
+\end{bmatrix}
+\right)
+\B{X}
+\right)^{-1}
+\\&=
+\left(
+\B{X}\tp
+\left(
+\begin{bmatrix} 
+\Lambda_{11} - \Lambda_{12}\Lambda_{22}\Lambda_{12}\tp  & \B{0}\\
+\B{0} & \B{0}
+\end{bmatrix}
+\right)
+\B{X}
+\right)^{-1}
+\\&=
+\left(
+\B{X_1}\tp
+\Sigma_{11}^{-1}
+\B{X_1}
+\right)^{-1}
+\end{align*}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Covariance of y_2 given y_1
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{align*}
+A
+=&
+ \left(
+\Lambda_{22}
+-
+\begin{bmatrix} 
+    \Lambda_{12} \\
+    \Lambda_{22}
+\end{bmatrix}\tp
+\B{X}
+\left(\B{X}\tp\Lambda\B{X}\right)^{-1}
+\B{X}\tp
+\begin{bmatrix} 
+\Lambda_{12} \\
+\Lambda_{22}
+\end{bmatrix}
+\right)^{-1}
+\\
+=&
+\Lambda_{22}^{-1}
++
+\Lambda_{22}^{-1}
+\begin{bmatrix} 
+    \Lambda_{12} \\
+    \Lambda_{22}
+\end{bmatrix}\tp
+\B{X}
+D
+\B{X}\tp
+\begin{bmatrix} 
+    \Lambda_{12} \\
+    \Lambda_{22}
+\end{bmatrix}
+\Lambda_{22}^{-1}
+\\
+=&
+\Lambda_{22}^{-1}
++
+\begin{bmatrix} 
+    -\Sigma_{11}^{-1}\Sigma_{12} \\
+    \B{I}
+\end{bmatrix}\tp
+\B{X}
+D
+\B{X}\tp
+\begin{bmatrix} 
+    -\Sigma_{11}^{-1}\Sigma_{12} \\
+    \B{I}
+\end{bmatrix}
+\\
+=&
+\Lambda_{22}^{-1}
++
+    \Sigma_{12}\tp\Sigma_{11}^{-1} 
+\B{X_1}
+\left(\B{X_1}\tp\Sigma_{11}^{-1}\B{X_1}\right)^{-1}
+\B{X_1}\tp
+    \Sigma_{11}^{-1}\Sigma_{12} 
+\\
+&-
+    \Sigma_{12}\tp\Sigma_{11}^{-1} 
+\B{X_1}
+\left(\B{X_1}\tp\Sigma_{11}^{-1}\B{X_1}\right)^{-1}
+\B{X_2}\tp
+-
+\B{X_2}
+\left(\B{X_1}\tp\Sigma_{11}^{-1}\B{X_1}\right)^{-1}
+\B{X_1}\tp
+    \Sigma_{11}^{-1}\Sigma_{12} 
++
+\B{X_2}
+\left(\B{X_1}\tp\Sigma_{11}^{-1}\B{X_1}\right)^{-1}
+\B{X_2}\tp
+\\
+=&
+\Lambda_{22}^{-1}
++
+    \left(\B{X_2}-\Sigma_{12}\tp\Sigma_{11}^{-1} \B{X_1}\right)
+\left(\B{X_1}\tp\Sigma_{11}^{-1}\B{X_1}\right)^{-1}
+    \left(\B{X_2}-\Sigma_{12}\tp\Sigma_{11}^{-1} \B{X_1}\right)\tp
+\\
+=&
+\Sigma_{22} - \Sigma_{12}\tp\Sigma_{11}^{-1}\Sigma_{12}
++
+    \left(\B{X_2}-\Sigma_{12}\tp\Sigma_{11}^{-1} \B{X_1}\right)
+\left(\B{X_1}\tp\Sigma_{11}^{-1}\B{X_1}\right)^{-1}
+    \left(\B{X_2}-\Sigma_{12}\tp\Sigma_{11}^{-1} \B{X_1}\right)\tp
+\end{align*}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% cross covariance between beta and y_2 given y_1
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{align*}
+B
+&=
+A
+\begin{bmatrix} 
+\Lambda_{12} \\
+\Lambda_{22}
+\end{bmatrix}\tp
+\B{X}
+\left(\B{X}\tp\Lambda\B{X}\right)^{-1}
+\\
+&=
+\Lambda_{22}^{-1}
+\begin{bmatrix} 
+\Lambda_{12} \\
+\Lambda_{22}
+\end{bmatrix}\tp
+\B{X}
+D
+\\
+&=
+\Lambda_{22}^{-1}
+\begin{bmatrix} 
+\Lambda_{12} \\
+\Lambda_{22}
+\end{bmatrix}\tp
+\B{X}
+\left(\B{X_1}\tp\Sigma_{11}^{-1}\B{X_1}\right)^{-1}
+\\
+&=
+-\Sigma_{12}\tp
+\Sigma_{11}^{-1}
+\B{X_1}
+\left(\B{X_1}\tp\Sigma_{11}^{-1}\B{X_1}\right)^{-1}
++
+\B{X_2}
+\left(\B{X_1}\tp\Sigma_{11}^{-1}\B{X_1}\right)^{-1}
+\\
+&=
+\left(
+\B{X_2}
+-
+\Sigma_{12}\tp
+\Sigma_{11}^{-1}
+\B{X_1}
+\right)
+\left(\B{X_1}\tp\Sigma_{11}^{-1}\B{X_1}\right)^{-1}
+\end{align*}
+
+
+\subsubsection{The mean of $p(y_2,\beta|y_1)$}
+\begin{align*}
+\begin{bmatrix}
+A
+& 
+B
+\\
+B\tp
+&
+D
+\end{bmatrix}
+\begin{bmatrix}
+    -\Lambda_{12}\tp\B{y_1}
+\\
+    \B{X_1}\tp\Lambda_{11}\B{y_1}
+    +
+    \B{X_2}\tp\Lambda_{12}\tp\B{y_1}    
+\end{bmatrix}
+=
+\begin{bmatrix}
+\B{\mu_2}
+\\
+\B{\mu_\beta}
+\end{bmatrix}
+\end{align*}
+
+%%%%%%%%%%%%%%%%%%%%%%%%
+% mean of y_2 given y_1
+%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{align*}
+\B{\mu_2}
+=&
+    B
+    \B{X_1}\tp\Lambda_{11}\B{y_1}
+    +
+    B\B{X_2}\tp\Lambda_{12}\tp\B{y_1}
+    -
+    A \Lambda_{12}\tp\B{y_1}
+\\
+=&
+\left(
+\B{X_2}
+-
+\Sigma_{12}\tp
+\Sigma_{11}^{-1}
+\B{X_1}
+\right)
+\left(\B{X_1}\tp\Sigma_{11}^{-1}\B{X_1}\right)^{-1}
+    \B{X_1}\tp\Lambda_{11}\B{y_1}
++
+\left(
+\B{X_2}
+-
+\Sigma_{12}\tp
+\Sigma_{11}^{-1}
+\B{X_1}
+\right)
+\left(\B{X_1}\tp\Sigma_{11}^{-1}\B{X_1}\right)^{-1}
+    \B{X_2}\tp\Lambda_{12}\tp\B{y_1}
+\\&
+-
+(\Lambda_{22}^{-1}
++
+    \Sigma_{12}\tp\Sigma_{11}^{-1} 
+\B{X_1}
+\left(\B{X_1}\tp\Sigma_{11}^{-1}\B{X_1}\right)^{-1}
+\B{X_1}\tp
+    \Sigma_{11}^{-1}\Sigma_{12} 
+\\
+&-
+    \Sigma_{12}\tp\Sigma_{11}^{-1} 
+\B{X_1}
+\left(\B{X_1}\tp\Sigma_{11}^{-1}\B{X_1}\right)^{-1}
+\B{X_2}\tp
+-
+\B{X_2}
+\left(\B{X_1}\tp\Sigma_{11}^{-1}\B{X_1}\right)^{-1}
+\B{X_1}\tp
+    \Sigma_{11}^{-1}\Sigma_{12} 
++
+\B{X_2}
+\left(\B{X_1}\tp\Sigma_{11}^{-1}\B{X_1}\right)^{-1}
+\B{X_2}\tp)
+     \Lambda_{12}\tp\B{y_1}
+\\
+=&
+\left(
+\B{X_2}
+-
+\Sigma_{12}\tp
+\Sigma_{11}^{-1}
+\B{X_1}
+\right)
+\left(\B{X_1}\tp\Sigma_{11}^{-1}\B{X_1}\right)^{-1}
+    \B{X_1}\tp\Lambda_{11}\B{y_1}
+\\&
+-
+(\Lambda_{22}^{-1}
++
+    \Sigma_{12}\tp\Sigma_{11}^{-1} 
+\B{X_1}
+\left(\B{X_1}\tp\Sigma_{11}^{-1}\B{X_1}\right)^{-1}
+\B{X_1}\tp
+    \Sigma_{11}^{-1}\Sigma_{12} 
+-
+\B{X_2}
+\left(\B{X_1}\tp\Sigma_{11}^{-1}\B{X_1}\right)^{-1}
+\B{X_1}\tp
+    \Sigma_{11}^{-1}\Sigma_{12} 
+)
+     \Lambda_{12}\tp\B{y_1}
+\\
+=&
+\left(
+\B{X_2}
+-
+\Sigma_{12}\tp
+\Sigma_{11}^{-1}
+\B{X_1}
+\right)
+\left(\B{X_1}\tp\Sigma_{11}^{-1}\B{X_1}\right)^{-1}
+    \B{X_1}\tp\Lambda_{11}\B{y_1}
+\\&
+-\Lambda_{22}^{-1} \Lambda_{12}\tp\B{y_1}
++\left(
+   \B{X_2} -  \Sigma_{12}\tp\Sigma_{11}^{-1} 
+\B{X_1}\right)
+\left(\B{X_1}\tp\Sigma_{11}^{-1}\B{X_1}\right)^{-1}
+\B{X_1}\tp
+    \Sigma_{11}^{-1}\Sigma_{12} 
+     \Lambda_{12}\tp\B{y_1}
+\\
+=&
+-\Lambda_{22}^{-1} \Lambda_{12}\tp\B{y_1}
++\left(
+   \B{X_2} -  \Sigma_{12}\tp\Sigma_{11}^{-1} 
+\B{X_1}\right)
+\left(\B{X_1}\tp\Sigma_{11}^{-1}\B{X_1}\right)^{-1}
+\B{X_1}\tp\left(
+    \Sigma_{11}^{-1}\Sigma_{12} 
+     \Lambda_{12}\tp
+     +
+   \Lambda_{11}  
+\right)
+\B{y_1}
+\\
+=&
+-\Lambda_{22}^{-1} \Lambda_{12}\tp\B{y_1}
++\left(
+   \B{X_2} -  \Sigma_{12}\tp\Sigma_{11}^{-1} 
+\B{X_1}\right)
+\left(\B{X_1}\tp\Sigma_{11}^{-1}\B{X_1}\right)^{-1}
+\B{X_1}\tp\left(
+    \Sigma_{11}^{-1}\Sigma_{12} 
+     \Lambda_{12}\tp
+     +
+   \Lambda_{11}  
+\right)
+\B{y_1}
+\\
+=&
+\Sigma_{12}\tp\Sigma_{11}^{-1}\B{y_1}
++\left(
+   \B{X_2} -  \Sigma_{12}\tp\Sigma_{11}^{-1} 
+\B{X_1}\right)
+\left(\B{X_1}\tp\Sigma_{11}^{-1}\B{X_1}\right)^{-1}
+\B{X_1}\tp\left(
+    \Sigma_{11}^{-1}\Sigma_{12} 
+     \Lambda_{12}\tp
+     +
+   \Lambda_{11}  
+\right)
+\B{y_1}
+\\
+=&
+\Sigma_{12}\tp\Sigma_{11}^{-1}\B{y_1}
++\left(
+   \B{X_2} -  \Sigma_{12}\tp\Sigma_{11}^{-1} 
+\B{X_1}\right)
+\left(\B{X_1}\tp\Sigma_{11}^{-1}\B{X_1}\right)^{-1}
+\B{X_1}\tp
+    \Sigma_{11}^{-1}
+\B{y_1}
+\\
+=&
+\Sigma_{12}\tp\Sigma_{11}^{-1}\B{y_1}
+-  \Sigma_{12}\tp\Sigma_{11}^{-1} 
+\B{X_1}
+\left(\B{X_1}\tp\Sigma_{11}^{-1}\B{X_1}\right)^{-1}
+\B{X_1}\tp
+    \Sigma_{11}^{-1}
+\B{y_1}
++
+\B{X_2}\left(\B{X_1}\tp\Sigma_{11}^{-1}\B{X_1}\right)^{-1}
+\B{X_1}\tp
+    \Sigma_{11}^{-1}
+\B{y_1}
+\end{align*}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% mean of beta given y_1
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{align*}
+\B{\mu_\beta}
+=&
+    D \B{X}\tp
+    \begin{bmatrix}
+        \Lambda_{11}\\
+        \Lambda_{12}\tp
+    \end{bmatrix}
+    \B{y_1}
+    - B\tp \Lambda_{12}\tp\B{y_1}
+\\
+=&
+\left(\B{X_1}\tp\Sigma_{11}^{-1}\B{X_1}\right)^{-1}
+\B{X}\tp
+    \begin{bmatrix}
+        \Lambda_{11}\\
+        \Lambda_{12}\tp
+    \end{bmatrix}
+    \B{y_1}
+-
+\left(\B{X_1}\tp\Sigma_{11}^{-1}\B{X_1}\right)^{-1}\left(
+\B{X_2}\tp
+-
+\B{X_1}\tp
+\Sigma_{11}^{-1}
+\Sigma_{12}
+\right)
+ \Lambda_{12}\tp\B{y_1}
+\\
+=&
+\left(\B{X_1}\tp\Sigma_{11}^{-1}\B{X_1}\right)^{-1}
+\left(
+\B{X}\tp
+    \begin{bmatrix}
+        \Lambda_{11}\\
+        \Lambda_{12}\tp
+    \end{bmatrix}
+-
+\B{X_2}\tp \Lambda_{12}\tp
++
+\B{X_1}\tp
+\Sigma_{11}^{-1}
+\Sigma_{12}
+ \Lambda_{12}\tp
+ \right)\B{y_1}
+ \\
+=&
+\left(\B{X_1}\tp\Sigma_{11}^{-1}\B{X_1}\right)^{-1}
+\left(
+\B{X_1}\tp\Lambda_{11}
++
+\B{X_2}\tp\Lambda_{12}\tp
+-
+\B{X_2}\tp \Lambda_{12}\tp
++
+\B{X_1}\tp
+\Sigma_{11}^{-1}
+\Sigma_{12}
+ \Lambda_{12}\tp
+ \right)\B{y_1}
+\\
+=&
+\left(\B{X_1}\tp\Sigma_{11}^{-1}\B{X_1}\right)^{-1}
+\left(
+\B{X_1}\tp\Sigma_{11}^{-1}
++
+\B{X_1}\tp\Sigma_{11}^{-1}\Sigma_{12}\Lambda_{22}\Sigma_{12}\tp\Sigma_{11}^{-1}
+-
+\B{X_1}\tp
+\Sigma_{11}^{-1}
+\Sigma_{12}
+\Lambda_{22}
+ \Sigma_{12}\tp
+ \Sigma_{11}^{-1}
+ \right)\B{y_1}
+\\
+=&
+\left(\B{X_1}\tp\Sigma_{11}^{-1}\B{X_1}\right)^{-1}
+\B{X_1}\tp\Sigma_{11}^{-1}
+\B{y_1}
+\end{align*}
+
+
+\subsection{Covariance of $\B{\beta}$ and test data}
+It follows that the covariance of $p(\B{y_2},\B{\beta}|\B{y_1})$ is
+
+
+\subsection{Mean of $\B{\beta}$ and test data}
+
+It follows that the mean of $p(\B{y_2},\B{\beta}|\B{y_1})$ is
+
+\subsection{Predictive distribution}
+\subsubsection{Predictive covariance}
+By marginalization (and use of block-wise matrix inversion) of $\B{\beta}$, it follows that the covariance of $p(\B{y_2}|\B{y_1})$ is
+
+
+\subsubsection{Predictive mean}
+
+By marginalization (and use of block-wise matrix inversion) of $\B{\beta}$, it follows that the mean of $p(\B{y_2}|\B{y_1})$ is
+
+\subsubsection{ $\B{\beta}$ covariance}
+By marginalization (and use of block-wise matrix inversion) of $\B{y_2}$, it follows that the covariance of $p(\B{\beta}|\B{y_1})$ is
+
+
+\subsubsection{$\B{\beta}$ mean}
+By marginalization (and use of block-wise matrix inversion) of $\B{y_2}$, it follows that the mean of $p(\B{\beta}|\B{y_1})$ is
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Conditional distribution OLS case}
+
+\begin{align*}
+\Normal{
+\begin{bmatrix}
+\B{y_1}\\
+\B{y_2}
+\end{bmatrix}
+}
+{
+\begin{bmatrix}
+\B{X_1}\\
+\B{X_2}
+\end{bmatrix}    
+\B{\beta}
+}
+{
+\sigma^2
+\B{I}
+}
+&\propto
+\exp\left(
+-\frac{1}{2\sigma^2}\left(
+\B{y_1}\tp\B{y_1}  + \B{y_2}\tp\B{y_2}
+-2\B{y_2}\tp\B{X_2}\B{\beta}-2\B{y_1}\tp\B{X_1}\B{\beta}+\B{\beta}\tp\B{X}\tp\B{X}\B{\beta}
+\right)
+\right)
+\\
+&\propto
+\exp\left(
+-\frac{1}{2\sigma^2}\left(
+\B{y_2}\tp\B{y_2}
+-2\B{y_2}\tp\B{X_2}\B{\beta}-2\B{y_1}\tp\B{X_1}\B{\beta}+\B{\beta}\tp\B{X}\tp\B{X}\B{\beta}
+\right)
+\right)
+\end{align*}
+Completing the squares we obtain the covariance of $p(y_2,\beta|y_1)$:
+\begin{align*}
+\sigma^2
+\begin{bmatrix}
+\B{I}
+&
+-\B{X_2}\tp
+\\
+-\B{X_2}
+&
+\B{X}\tp\B{X}
+\end{bmatrix}^{-1}
+\\=
+\sigma^2
+\begin{bmatrix}
+\B{I} + \B{X_2}\tp\left(\B{X_1}\tp\B{X_1}\right)^{-1}\B{X_2}\tp
+&
+\B{X_2}\left(\B{X_1}\tp\B{X_1}\right)^{-1}
+\\
+\left(\B{X_1}\tp\B{X_1}\right)^{-1}\B{X_2}
+&
+\left(\B{X_1}\tp\B{X_1}\right)^{-1}
+\end{bmatrix}
+\end{align*}
+and the mean
+\begin{align*}
+\sigma^2
+\begin{bmatrix}
+\B{I} + \B{X_2}\tp\left(\B{X_1}\tp\B{X_1}\right)^{-1}\B{X_2}\tp
+&
+\B{X_2}\left(\B{X_1}\tp\B{X_1}\right)^{-1}
+\\
+\left(\B{X_1}\tp\B{X_1}\right)^{-1}\B{X_2}
+&
+\left(\B{X_1}\tp\B{X_1}\right)^{-1}
+\end{bmatrix}
+\begin{bmatrix}
+\B{0}
+\\
+\B{X_1}\tp\B{y_1}
+\end{bmatrix}
+\end{align*}
+So for the marginal case, we get the covariance for $\B{y_2}$
+\begin{align*}
+\sigma^2
+\left(
+\B{I} + \B{X_2}\left(
+\B{X_1}\tp
+\B{X_1}
+\right)^{-1}\B{X_2}\tp
+\right)
+\end{align*}
+
+and the mean for $\B{y_2}$
+
+\begin{align*}
+\B{X_2}\left(
+\B{X_1}\tp\B{X_1}
+\right)^{-1}
+\B{X_1}\tp\B{y_1}
+\end{align*}
+
+So for the marginal case, we get the covariance for $\beta$
+\begin{align*}
+\sigma^2
+\left(
+\B{X_1}\tp
+\B{X_1}
+\right)^{-1}
+\end{align*}
+
+and the mean for $\beta$
+
+\begin{align*}
+\left(
+\B{X_1}\tp\B{X_1}
+\right)^{-1}
+\B{X_1}\tp\B{y_1}
+\end{align*}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Conditional distribution OLS case with single random input $\B{X}$}
+
+\begin{align*}
+\Normal{
+\begin{bmatrix}
+\B{y_1}\\
+\B{y_2}
+\end{bmatrix}
+}
+{
+\begin{bmatrix}
+\B{X_1}\\
+\B{X_2}
+\end{bmatrix}    
+\B{\beta}
+}
+{
+\sigma^2
+\B{I}
+}
+\Normal{
+\begin{bmatrix}
+\B{X_1}\\
+\B{X_2}
+\end{bmatrix}
+}
+{
+\B{0}
+}
+{
+\psi^2
+\B{I}
+}
+\\
+\propto
+\exp\left(
+-\frac{1}{2\sigma^2}\left(
+\B{y_1}\tp\B{y_1}  + \B{y_2}\tp\B{y_2}
+-2\B{y_2}\tp\B{X_2}\B{\beta}-2\B{y_1}\tp\B{X_1}\B{\beta}+\B{\beta}\tp\B{X}\tp\B{X}\B{\beta}
+\right)
+-\frac{1}{2\psi^2}\left(
+\B{X}\tp\B{X}
+\right)
+\right)
+\\
+\propto
+\exp\left(
+-\frac{1}{2\sigma^2}\left(
+\B{y_2}\tp\B{y_2}
+-2\B{y_2}\tp\B{X_2}\B{\beta}-2\B{y_1}\tp\B{X_1}\B{\beta}+\B{\beta}\tp\B{X}\tp\B{X}\B{\beta}
+\right)
+-\frac{1}{2\psi^2}\left(
+\B{X}\tp\B{X}
+\right)
+\right)
+\end{align*}
+
+
+\end{document}

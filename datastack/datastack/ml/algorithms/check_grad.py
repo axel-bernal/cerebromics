@@ -1,0 +1,62 @@
+import numpy as np
+from scipy.optimize import approx_fprime
+
+_eps = np.sqrt(np.finfo(float).eps)
+
+def mcheck_grad(func, grad, x0, epsilon=_eps,
+                     allerrs=False):
+    assert len(x0.shape) == 1
+    errs = np.zeros(x0.size)
+    x = x0.copy()
+    for i in xrange(x0.size):
+
+        def funci(x0i):
+            x[i] = x0i
+            r = func(x, i)
+            x[i] = x0[i]
+            return np.ravel(r)
+
+        def gradi(x0i):
+            x[i] = x0i
+            g = np.ravel(grad(x, i))
+            x[i] = x0[i]
+            return g
+
+        errs[i] = _vcheck_grad(funci, gradi, x0[i],
+                                 epsilon)
+
+    assert np.all(errs >= 0.0)
+    if allerrs:
+        return errs
+    return np.max(errs)
+
+
+########################### INTERNAL USE ONLY ###########################
+
+def _check_grad(func, grad, x0, epsilon=_eps):
+    gradient = grad(x0)
+    finite_differences = approx_fprime(x0, func, epsilon)
+    print "grad:\t" + str(gradient)
+    print "fdif:\t" + str(finite_differences)
+    diff2 = (gradient - finite_differences)**2.0
+    print "----------\ndiff:\t" + str(diff2) + "\n----------\n"
+    #ipdb.set_trace()
+    return np.sqrt(sum(diff2))
+
+
+def _vcheck_grad(func, grad, x0,
+                   epsilon=_eps):
+
+    assert len(func(x0).shape) == 1
+    assert len(grad(x0).shape) == 1
+
+    n = func(x0).size
+
+    errs = np.zeros(n)
+
+    for i in xrange(n):
+        errs[i] = _check_grad(lambda x: func(x[0])[i], lambda x: grad(x[0])[i],
+                             [x0], epsilon)
+
+
+    return np.max(errs)
